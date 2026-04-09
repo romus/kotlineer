@@ -32,6 +32,7 @@ def render_formula(version: str, url: str, sha256: str, homepage: str, python_fo
 
   test do
     assert_match "{version}", shell_output("#{{bin}}/kotlineer --version")
+    assert_predicate bin/"kotlineer-mcp", :exist?
   end
 end
 '''

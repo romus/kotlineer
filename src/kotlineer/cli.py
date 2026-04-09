@@ -10,59 +10,18 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
 
 from . import __version__
 from .client import KotlinLspClient
+from .utils import (
+    SEVERITY_LABELS,
+    apply_text_edits,
+    find_kotlin_files,
+    uri_to_path,
+    wait_for_diagnostics,
+)
 
 logger = logging.getLogger(__name__)
-
-IGNORE_DIRS = {"build", ".gradle", ".idea", "out", ".git"}
-
-SEVERITY_LABELS = {1: "error", 2: "warning", 3: "info", 4: "hint"}
-
-
-# ── Helpers ─────────────────────────────────────────────────────────
-
-
-def _uri_to_path(uri: str) -> str:
-    parsed = urlparse(uri)
-    return unquote(parsed.path)
-
-
-def find_kotlin_files(workspace: Path) -> list[Path]:
-    return sorted(
-        p for p in workspace.rglob("*.kt") if not any(part in IGNORE_DIRS for part in p.parts)
-    )
-
-
-def apply_text_edits(text: str, edits: list[dict[str, Any]]) -> str:
-    lines = text.split("\n")
-
-    sorted_edits = sorted(
-        edits,
-        key=lambda e: (
-            e["range"]["start"]["line"],
-            e["range"]["start"]["character"],
-        ),
-        reverse=True,
-    )
-
-    for edit in sorted_edits:
-        start = edit["range"]["start"]
-        end = edit["range"]["end"]
-        new_text = edit["newText"]
-
-        sl, sc = start["line"], start["character"]
-        el, ec = end["line"], end["character"]
-
-        before = lines[sl][:sc]
-        after = lines[el][ec:]
-
-        new_lines = (before + new_text + after).split("\n")
-        lines[sl : el + 1] = new_lines
-
-    return "\n".join(lines)
 
 
 @asynccontextmanager
@@ -102,31 +61,6 @@ def _resolve_files(args: argparse.Namespace) -> list[Path]:
     return find_kotlin_files(Path(args.workspace).resolve())
 
 
-async def _wait_for_diagnostics(
-    client: KotlinLspClient,
-    timeout: float = 30.0,
-    settle: float = 3.0,
-) -> None:
-    loop = asyncio.get_event_loop()
-    last_update: float | None = None  # None until first diagnostic arrives
-
-    def on_diag(_uri: str, _diags: list) -> None:
-        nonlocal last_update
-        last_update = loop.time()
-
-    client.diagnostics.on_update(on_diag)
-
-    deadline = loop.time() + timeout
-    while True:
-        now = loop.time()
-        if now > deadline:
-            break
-        # Only apply settle logic after at least one diagnostic arrived
-        if last_update is not None and now - last_update >= settle:
-            break
-        await asyncio.sleep(0.5)
-
-
 # ── Subcommands ─────────────────────────────────────────────────────
 
 
@@ -153,7 +87,7 @@ async def cmd_check(args: argparse.Namespace) -> int:
             for uri in uris:
                 await client.diagnostics.pull(uri)
         else:
-            await _wait_for_diagnostics(
+            await wait_for_diagnostics(
                 client,
                 timeout=args.timeout,
                 settle=args.settle_time,
@@ -168,7 +102,7 @@ async def cmd_check(args: argparse.Namespace) -> int:
         for uri, diags in all_diags.items():
             if not diags:
                 continue
-            path = _uri_to_path(uri)
+            path = uri_to_path(uri)
             output[path] = [
                 {
                     "line": d["range"]["start"]["line"] + 1,
@@ -183,7 +117,7 @@ async def cmd_check(args: argparse.Namespace) -> int:
         for uri, diags in all_diags.items():
             if not diags:
                 continue
-            path = _uri_to_path(uri)
+            path = uri_to_path(uri)
             for d in diags:
                 line = d["range"]["start"]["line"] + 1
                 col = d["range"]["start"]["character"] + 1
@@ -289,7 +223,7 @@ def _print_locations(result: Any, as_json: bool) -> int:
         print(json.dumps(locations, indent=2, ensure_ascii=False))
     else:
         for loc in locations:
-            path = _uri_to_path(loc["uri"])
+            path = uri_to_path(loc["uri"])
             line = loc["range"]["start"]["line"] + 1
             col = loc["range"]["start"]["character"] + 1
             print(f"{path}:{line}:{col}")
@@ -457,7 +391,24 @@ def build_parser() -> argparse.ArgumentParser:
     p_sym.add_argument("--query", "-q", help="Workspace symbol search query")
     p_sym.set_defaults(func=cmd_symbols)
 
+    # mcp
+    p_mcp = sub.add_parser("mcp", help="Start MCP server for AI assistants")
+    p_mcp.set_defaults(func=cmd_mcp)
+
     return parser
+
+
+def cmd_mcp(args: argparse.Namespace) -> int:
+    try:
+        from .mcp_server import run_server
+    except ImportError:
+        print(
+            "MCP support requires the 'mcp' package: pip install kotlineer[mcp]",
+            file=sys.stderr,
+        )
+        return 2
+    run_server(args)
+    return 0
 
 
 def main() -> None:
@@ -470,7 +421,8 @@ def main() -> None:
     )
 
     try:
-        code = asyncio.run(args.func(args))
+        result = args.func(args)
+        code = asyncio.run(result) if asyncio.iscoroutine(result) else result
     except KeyboardInterrupt:
         code = 130
     except Exception as exc:

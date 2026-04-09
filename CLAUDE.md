@@ -32,6 +32,9 @@ Run a single test: `uv run python -m pytest tests/test_cli.py -v -k "test_name"`
 3. **`services/`** — One service per LSP capability (diagnostics, formatting, hover, navigation, symbols, completion, code_actions, refactoring, hierarchy, jetbrains_extensions). Each takes an `LspConnection` and wraps raw LSP methods.
 4. **`cli.py`** — argparse-based CLI entry point (`kotlineer` command). Each subcommand is an async function (`cmd_check`, `cmd_format`, etc.) that creates a client, runs operations, and formats output.
 
+5. **`mcp_server.py`** — MCP server (`FastMCP`) exposing kotlin-lsp as 8 MCP tools for AI assistants. Uses `KotlinLspClient` via lifespan context. Entry point: `kotlineer-mcp` or `kotlineer mcp`.
+6. **`utils.py`** — Shared utilities used by both CLI and MCP server (text edits, URI conversion, file discovery, diagnostics waiting).
+
 **Supporting modules:** `types.py` (config dataclass, error classes), `documents.py` (document open/close/update tracking), `process.py` (subprocess management).
 
 **Key patterns:**

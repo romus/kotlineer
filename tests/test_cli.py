@@ -10,8 +10,6 @@ from kotlineer.cli import (
     _print_locations,
     _print_symbols,
     _resolve_files,
-    _uri_to_path,
-    apply_text_edits,
     build_parser,
     cmd_check,
     cmd_definition,
@@ -19,7 +17,11 @@ from kotlineer.cli import (
     cmd_hover,
     cmd_references,
     cmd_symbols,
+)
+from kotlineer.utils import (
+    apply_text_edits,
     find_kotlin_files,
+    uri_to_path,
 )
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -27,13 +29,13 @@ from kotlineer.cli import (
 
 class TestUriToPath:
     def test_simple(self):
-        assert _uri_to_path("file:///src/Main.kt") == "/src/Main.kt"
+        assert uri_to_path("file:///src/Main.kt") == "/src/Main.kt"
 
     def test_encoded_spaces(self):
-        assert _uri_to_path("file:///my%20project/Main.kt") == "/my project/Main.kt"
+        assert uri_to_path("file:///my%20project/Main.kt") == "/my project/Main.kt"
 
     def test_no_scheme(self):
-        assert _uri_to_path("/plain/path") == "/plain/path"
+        assert uri_to_path("/plain/path") == "/plain/path"
 
 
 class TestFindKotlinFiles:
@@ -429,7 +431,7 @@ class TestCmdCheck:
         with patch("kotlineer.cli._open_client") as mock_ctx:
             mock_ctx.return_value.__aenter__ = AsyncMock(return_value=client)
             mock_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("kotlineer.cli._wait_for_diagnostics", new_callable=AsyncMock):
+            with patch("kotlineer.cli.wait_for_diagnostics", new_callable=AsyncMock):
                 code = await cmd_check(args)
 
         assert code == 0
@@ -464,7 +466,7 @@ class TestCmdCheck:
         with patch("kotlineer.cli._open_client") as mock_ctx:
             mock_ctx.return_value.__aenter__ = AsyncMock(return_value=client)
             mock_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("kotlineer.cli._wait_for_diagnostics", new_callable=AsyncMock):
+            with patch("kotlineer.cli.wait_for_diagnostics", new_callable=AsyncMock):
                 code = await cmd_check(args)
 
         assert code == 1
@@ -503,7 +505,7 @@ class TestCmdCheck:
         with patch("kotlineer.cli._open_client") as mock_ctx:
             mock_ctx.return_value.__aenter__ = AsyncMock(return_value=client)
             mock_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("kotlineer.cli._wait_for_diagnostics", new_callable=AsyncMock):
+            with patch("kotlineer.cli.wait_for_diagnostics", new_callable=AsyncMock):
                 code = await cmd_check(args)
 
         assert code == 1
@@ -530,7 +532,7 @@ class TestCmdCheck:
         with patch("kotlineer.cli._open_client") as mock_ctx:
             mock_ctx.return_value.__aenter__ = AsyncMock(return_value=client)
             mock_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
-            with patch("kotlineer.cli._wait_for_diagnostics", new_callable=AsyncMock):
+            with patch("kotlineer.cli.wait_for_diagnostics", new_callable=AsyncMock):
                 code = await cmd_check(args)
 
         assert code == 0
