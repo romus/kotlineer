@@ -20,55 +20,11 @@ class TestKotlinLspConfig:
         assert cfg.server_args == []
         assert cfg.server_env == {}
         assert cfg.request_timeout == 30.0
-        assert cfg.jvm_target == "default"
-        assert cfg.diagnostics_enabled is True
-        assert cfg.diagnostics_debounce == 250
-        assert cfg.formatting_formatter == "ktfmt"
-        assert cfg.indexing_enabled is True
-        assert cfg.snippets_enabled is False
-        assert cfg.inlay_hints_type is False
-        assert cfg.inlay_hints_parameter is False
-        assert cfg.inlay_hints_chained is False
 
-    def test_to_initialization_options_defaults(self):
+    def test_to_initialization_options_returns_empty(self):
         cfg = KotlinLspConfig(server_path="/bin/kls", workspace_root="/project")
         opts = cfg.to_initialization_options()
-
-        assert opts["compiler"]["jvm"]["target"] == "default"
-        assert opts["completion"]["snippets"]["enabled"] is False
-        assert opts["diagnostics"]["enabled"] is True
-        assert opts["diagnostics"]["debounceTime"] == 250
-        assert opts["formatting"]["formatter"] == "ktfmt"
-        assert opts["indexing"]["enabled"] is True
-        assert opts["inlayHints"]["typeHints"] is False
-        assert opts["inlayHints"]["parameterHints"] is False
-        assert opts["inlayHints"]["chainedHints"] is False
-
-    def test_to_initialization_options_custom(self):
-        cfg = KotlinLspConfig(
-            server_path="/bin/kls",
-            workspace_root="/project",
-            jvm_target="17",
-            snippets_enabled=True,
-            diagnostics_enabled=False,
-            diagnostics_debounce=500,
-            formatting_formatter="google-java-format",
-            indexing_enabled=False,
-            inlay_hints_type=True,
-            inlay_hints_parameter=True,
-            inlay_hints_chained=True,
-        )
-        opts = cfg.to_initialization_options()
-
-        assert opts["compiler"]["jvm"]["target"] == "17"
-        assert opts["completion"]["snippets"]["enabled"] is True
-        assert opts["diagnostics"]["enabled"] is False
-        assert opts["diagnostics"]["debounceTime"] == 500
-        assert opts["formatting"]["formatter"] == "google-java-format"
-        assert opts["indexing"]["enabled"] is False
-        assert opts["inlayHints"]["typeHints"] is True
-        assert opts["inlayHints"]["parameterHints"] is True
-        assert opts["inlayHints"]["chainedHints"] is True
+        assert opts == {}
 
     def test_mutable_defaults_are_independent(self):
         cfg1 = KotlinLspConfig(server_path="/a", workspace_root="/b")

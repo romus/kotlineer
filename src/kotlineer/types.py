@@ -12,10 +12,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class KotlinLspConfig:
-    """Configuration for the Kotlin LSP client."""
+    """Configuration for the Kotlin LSP client (JetBrains kotlin-lsp)."""
 
     server_path: str
-    """Path to the kotlin-language-server binary."""
+    """Path to the kotlin-lsp binary."""
 
     workspace_root: str
     """Absolute path to the project root directory."""
@@ -29,34 +29,9 @@ class KotlinLspConfig:
     request_timeout: float = 30.0
     """Timeout in seconds for LSP requests."""
 
-    # Kotlin LS settings (sent during initialization)
-    jvm_target: str = "default"
-    diagnostics_enabled: bool = True
-    diagnostics_debounce: int = 250
-    formatting_formatter: str = "ktfmt"
-    indexing_enabled: bool = True
-    snippets_enabled: bool = False
-    inlay_hints_type: bool = False
-    inlay_hints_parameter: bool = False
-    inlay_hints_chained: bool = False
-
     def to_initialization_options(self) -> dict[str, Any]:
         """Build the initializationOptions dict for the LSP initialize request."""
-        return {
-            "compiler": {"jvm": {"target": self.jvm_target}},
-            "completion": {"snippets": {"enabled": self.snippets_enabled}},
-            "diagnostics": {
-                "enabled": self.diagnostics_enabled,
-                "debounceTime": self.diagnostics_debounce,
-            },
-            "formatting": {"formatter": self.formatting_formatter},
-            "indexing": {"enabled": self.indexing_enabled},
-            "inlayHints": {
-                "typeHints": self.inlay_hints_type,
-                "parameterHints": self.inlay_hints_parameter,
-                "chainedHints": self.inlay_hints_chained,
-            },
-        }
+        return {}
 
 
 # ── Open document state ─────────────────────────────────────────────

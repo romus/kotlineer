@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class ServerProcess:
-    """Manages the kotlin-language-server child process."""
+    """Manages the kotlin-lsp child process."""
 
     def __init__(self, config: KotlinLspConfig) -> None:
         self._config = config
@@ -36,8 +36,11 @@ class ServerProcess:
 
         env = {**os.environ, **self._config.server_env} if self._config.server_env else None
 
-        cmd = [self._config.server_path, *self._config.server_args]
-        logger.info("Starting kotlin-language-server: %s", " ".join(cmd))
+        extra_args = list(self._config.server_args)
+        if "--stdio" not in extra_args:
+            extra_args.insert(0, "--stdio")
+        cmd = [self._config.server_path, *extra_args]
+        logger.info("Starting kotlin-lsp: %s", " ".join(cmd))
 
         self._process = await asyncio.create_subprocess_exec(
             *cmd,

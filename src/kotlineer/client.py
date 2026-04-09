@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote
-from functools import cached_property
 
 from .connection import LspConnection
 from .documents import DocumentManager
@@ -15,7 +15,7 @@ from .services.diagnostics import DiagnosticsService
 from .services.formatting import FormattingService
 from .services.hierarchy import HierarchyService
 from .services.hover import HoverService
-from .services.kotlin_extensions import KotlinExtensionService
+from .services.jetbrains_extensions import JetBrainsExtensionService
 from .services.navigation import NavigationService
 from .services.refactoring import RefactoringService
 from .services.symbols import SymbolService
@@ -30,31 +30,75 @@ def _path_to_uri(path: str) -> str:
     return "file://" + quote(str(p), safe="/:")
 
 
+DEFAULT_HOST = "localhost"
+DEFAULT_PORT = 8200
+
+
 class KotlinLspClient:
-    """Main facade for interacting with kotlin-language-server."""
+    """Main facade for interacting with JetBrains kotlin-lsp.
+
+    By default connects to an already-running server via TCP.
+    Use ``KotlinLspClient.spawn()`` to launch a new server subprocess instead.
+    """
 
     def __init__(
         self,
-        server_path: str,
         workspace_root: str,
-        **kwargs: Any,
+        *,
+        host: str = DEFAULT_HOST,
+        port: int = DEFAULT_PORT,
+        request_timeout: float = 30.0,
     ) -> None:
         self._config = KotlinLspConfig(
-            server_path=server_path,
+            server_path="",
             workspace_root=str(Path(workspace_root).resolve()),
-            **kwargs,
+            request_timeout=request_timeout,
         )
-        self._server = ServerProcess(self._config)
+        self._server: ServerProcess | None = None
         self._connection: LspConnection | None = None
         self._documents: DocumentManager | None = None
         self._capabilities: dict[str, Any] | None = None
+        self._socket_writer: asyncio.StreamWriter | None = None
+        self._remote_host = host
+        self._remote_port = port
 
         # Cached service instances (reset on stop)
         self._services: dict[str, Any] = {}
 
+    @classmethod
+    def spawn(
+        cls,
+        workspace_root: str,
+        *,
+        server_path: str = "kotlin-lsp",
+        request_timeout: float = 30.0,
+        server_args: list[str] | None = None,
+        server_env: dict[str, str] | None = None,
+    ) -> KotlinLspClient:
+        """Create a client that launches a new kotlin-lsp subprocess (stdio)."""
+        client = cls.__new__(cls)
+        client._config = KotlinLspConfig(
+            server_path=server_path,
+            workspace_root=str(Path(workspace_root).resolve()),
+            request_timeout=request_timeout,
+            server_args=server_args or [],
+            server_env=server_env or {},
+        )
+        client._server = ServerProcess(client._config)
+        client._connection = None
+        client._documents = None
+        client._capabilities = None
+        client._socket_writer = None
+        client._remote_host = ""
+        client._remote_port = 0
+        client._services = {}
+        return client
+
     @property
     def is_running(self) -> bool:
-        return self._server.is_running and self._connection is not None
+        if self._server is not None:
+            return self._server.is_running and self._connection is not None
+        return self._connection is not None
 
     @property
     def capabilities(self) -> dict[str, Any] | None:
@@ -63,14 +107,29 @@ class KotlinLspClient:
     # ── Lifecycle ───────────────────────────────────────────────────
 
     async def start(self) -> dict[str, Any]:
-        """Start the server and perform LSP initialization. Returns server capabilities."""
-        stdout, stdin = await self._server.start()
+        """Start the server (or connect to a running one) and perform LSP initialization."""
+        if self._server is not None:
+            # Subprocess mode
+            stdout, stdin = await self._server.start()
+            self._connection = LspConnection(
+                reader=stdout,
+                writer=stdin,
+                request_timeout=self._config.request_timeout,
+            )
+        else:
+            # Socket mode — connect to already-running server
+            host = self._remote_host
+            port = self._remote_port
+            logger.info("Connecting to kotlin-lsp at %s:%d", host, port)
+            reader, writer = await asyncio.open_connection(host, port)
+            self._socket_writer = writer
+            self._connection = LspConnection(
+                reader=reader,
+                writer=writer,
+                request_timeout=self._config.request_timeout,
+            )
+            logger.info("Connected to kotlin-lsp at %s:%d", host, port)
 
-        self._connection = LspConnection(
-            reader=stdout,
-            writer=stdin,
-            request_timeout=self._config.request_timeout,
-        )
         await self._connection.start()
 
         self._documents = DocumentManager(self._connection)
@@ -99,7 +158,7 @@ class KotlinLspClient:
         return self._capabilities
 
     async def stop(self) -> None:
-        """Shutdown the LSP session and stop the server."""
+        """Shutdown the LSP session and stop/disconnect the server."""
         if self._documents:
             await self._documents.close_all()
 
@@ -111,7 +170,16 @@ class KotlinLspClient:
                 logger.debug("Error during LSP shutdown", exc_info=True)
             await self._connection.close()
 
-        await self._server.stop()
+        if self._server is not None:
+            await self._server.stop()
+
+        if self._socket_writer is not None:
+            self._socket_writer.close()
+            try:
+                await self._socket_writer.wait_closed()
+            except Exception:
+                pass
+            self._socket_writer = None
 
         self._connection = None
         self._documents = None
@@ -192,8 +260,8 @@ class KotlinLspClient:
         return self._get_service("hierarchy", HierarchyService)
 
     @property
-    def kotlin(self) -> KotlinExtensionService:
-        return self._get_service("kotlin", KotlinExtensionService)
+    def jetbrains(self) -> JetBrainsExtensionService:
+        return self._get_service("jetbrains", JetBrainsExtensionService)
 
     @property
     def diagnostics(self) -> DiagnosticsService:
@@ -232,7 +300,7 @@ class KotlinLspClient:
                 },
                 "completion": {
                     "completionItem": {
-                        "snippetSupport": self._config.snippets_enabled,
+                        "snippetSupport": True,
                         "commitCharactersSupport": True,
                         "documentationFormat": ["plaintext", "markdown"],
                         "deprecatedSupport": True,

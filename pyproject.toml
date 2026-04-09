@@ -1,7 +1,7 @@
 [project]
 name = "kotlineer"
 version = "0.1.0"
-description = "Lightweight Python wrapper around kotlin-language-server"
+description = "Lightweight Python wrapper around JetBrains kotlin-lsp"
 requires-python = ">=3.11"
 dependencies = [
     "lsprotocol>=2024.0.0",

@@ -4,7 +4,7 @@ from .diagnostics import DiagnosticsService
 from .formatting import FormattingService
 from .hierarchy import HierarchyService
 from .hover import HoverService
-from .kotlin_extensions import KotlinExtensionService
+from .jetbrains_extensions import JetBrainsExtensionService
 from .navigation import NavigationService
 from .refactoring import RefactoringService
 from .symbols import SymbolService
@@ -16,7 +16,7 @@ __all__ = [
     "FormattingService",
     "HierarchyService",
     "HoverService",
-    "KotlinExtensionService",
+    "JetBrainsExtensionService",
     "NavigationService",
     "RefactoringService",
     "SymbolService",

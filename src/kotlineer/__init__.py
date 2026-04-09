@@ -1,4 +1,4 @@
-from .client import KotlinLspClient
+from .client import DEFAULT_HOST, DEFAULT_PORT, KotlinLspClient
 from .types import (
     KotlinLspConfig,
     LspError,
@@ -9,6 +9,8 @@ from .types import (
 )
 
 __all__ = [
+    "DEFAULT_HOST",
+    "DEFAULT_PORT",
     "KotlinLspClient",
     "KotlinLspConfig",
     "LspError",

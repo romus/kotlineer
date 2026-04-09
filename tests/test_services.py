@@ -13,7 +13,7 @@ from kotlineer.services.symbols import SymbolService
 from kotlineer.services.code_actions import CodeActionService
 from kotlineer.services.hierarchy import HierarchyService
 from kotlineer.services.refactoring import RefactoringService
-from kotlineer.services.kotlin_extensions import KotlinExtensionService
+from kotlineer.services.jetbrains_extensions import JetBrainsExtensionService
 
 
 def _mock_conn(return_value=None) -> AsyncMock:
@@ -349,39 +349,18 @@ class TestRefactoringService:
         assert result["placeholder"] == "oldName"
 
 
-# ── Kotlin Extensions ─────────────────────────────────────────────
+# ── JetBrains Extensions ──────────────────────────────────────────
 
 
-class TestKotlinExtensionService:
-    async def test_jar_class_contents(self):
-        conn = _mock_conn(return_value="class Foo {}")
-        svc = KotlinExtensionService(conn)
-        result = await svc.jar_class_contents("file:///lib.jar!/Foo.class")
+class TestJetBrainsExtensionService:
+    async def test_restart_lsp(self):
+        conn = _mock_conn(return_value=None)
+        svc = JetBrainsExtensionService(conn)
+        await svc.restart_lsp()
         conn.send_request.assert_called_once_with(
-            "kotlin/jarClassContents",
-            {"uri": "file:///lib.jar!/Foo.class"},
+            "jetbrains.kotlin.restartLsp",
+            {},
         )
-        assert result == "class Foo {}"
-
-    async def test_build_output_location(self):
-        conn = _mock_conn(return_value="/project/build/classes")
-        svc = KotlinExtensionService(conn)
-        result = await svc.build_output_location()
-        conn.send_request.assert_called_once_with("kotlin/buildOutputLocation", {})
-
-    async def test_main_class(self):
-        conn = _mock_conn(return_value={"uri": "file:///a.kt", "className": "MainKt"})
-        svc = KotlinExtensionService(conn)
-        result = await svc.main_class("file:///a.kt")
-        conn.send_request.assert_called_once_with("kotlin/mainClass", {"uri": "file:///a.kt"})
-
-    async def test_override_member(self):
-        conn = _mock_conn(return_value=[{"label": "toString()"}])
-        svc = KotlinExtensionService(conn)
-        result = await svc.override_member("file:///a.kt", 5, 0)
-        args = conn.send_request.call_args[0]
-        assert args[0] == "kotlin/overrideMember"
-        assert args[1]["position"] == {"line": 5, "character": 0}
 
 
 # ── Diagnostics ────────────────────────────────────────────────────

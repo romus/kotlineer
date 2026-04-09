@@ -219,7 +219,7 @@ class TestNotificationHandlers:
 
 
 class TestServerRequest:
-    async def test_auto_responds_null(self):
+    async def test_workspace_configuration_responds_with_empty_configs(self):
         server_req = _make_server_request(99, "workspace/configuration")
         reader = asyncio.StreamReader()
         writer = FakeWriter()
@@ -234,6 +234,23 @@ class TestServerRequest:
         msgs = writer.get_messages()
         assert len(msgs) == 1
         assert msgs[0]["id"] == 99
+        assert msgs[0]["result"] == [{}]
+
+    async def test_unknown_request_responds_null(self):
+        server_req = _make_server_request(100, "window/showMessage")
+        reader = asyncio.StreamReader()
+        writer = FakeWriter()
+        conn = LspConnection(reader, writer, request_timeout=5.0)  # type: ignore[arg-type]
+
+        await conn.start()
+        reader.feed_data(server_req)
+        reader.feed_eof()
+        await asyncio.sleep(0.05)
+        await conn.close()
+
+        msgs = writer.get_messages()
+        assert len(msgs) == 1
+        assert msgs[0]["id"] == 100
         assert msgs[0]["result"] is None
 
 

@@ -261,6 +261,26 @@ class TestBuildParser:
         assert args.timeout == 60.0
         assert args.json is True
 
+    def test_connect_option(self):
+        parser = build_parser()
+        args = parser.parse_args(["--connect", "10.0.0.1:9999", "check"])
+        assert args.connect == "10.0.0.1:9999"
+
+    def test_connect_default(self):
+        parser = build_parser()
+        args = parser.parse_args(["check"])
+        assert args.connect == "localhost:8200"
+
+    def test_spawn_flag(self):
+        parser = build_parser()
+        args = parser.parse_args(["--spawn", "check"])
+        assert args.spawn is True
+
+    def test_spawn_default_is_false(self):
+        parser = build_parser()
+        args = parser.parse_args(["check"])
+        assert args.spawn is False
+
     def test_no_subcommand_raises(self):
         parser = build_parser()
         with pytest.raises(SystemExit):

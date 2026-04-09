@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from kotlineer.client import KotlinLspClient, _path_to_uri
+from kotlineer.client import DEFAULT_HOST, DEFAULT_PORT, KotlinLspClient, _path_to_uri
 from kotlineer.types import ServerNotRunningError
 
 
@@ -35,17 +35,17 @@ class TestPathToUri:
 
 class TestClientLifecycle:
     def test_not_running_initially(self, tmp_path):
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
+        client = KotlinLspClient(str(tmp_path))
         assert client.is_running is False
         assert client.capabilities is None
 
     def test_ensure_running_raises(self, tmp_path):
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
+        client = KotlinLspClient(str(tmp_path))
         with pytest.raises(ServerNotRunningError):
             client._ensure_running()
 
     def test_service_access_before_start_raises(self, tmp_path):
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
+        client = KotlinLspClient(str(tmp_path))
         with pytest.raises(ServerNotRunningError):
             _ = client.completion
         with pytest.raises(ServerNotRunningError):
@@ -54,14 +54,86 @@ class TestClientLifecycle:
             _ = client.diagnostics
 
     async def test_on_diagnostics_before_start_raises(self, tmp_path):
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
+        client = KotlinLspClient(str(tmp_path))
         with pytest.raises(ServerNotRunningError):
             client.on_diagnostics(lambda p: None)
 
 
-class TestClientStart:
-    async def test_start_initializes(self, tmp_path):
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
+class TestDefaultConstructor:
+    def test_defaults(self, tmp_path):
+        client = KotlinLspClient(str(tmp_path))
+        assert client._server is None
+        assert client._remote_host == DEFAULT_HOST
+        assert client._remote_port == DEFAULT_PORT
+
+    def test_custom_host_port(self, tmp_path):
+        client = KotlinLspClient(str(tmp_path), host="10.0.0.1", port=9999)
+        assert client._remote_host == "10.0.0.1"
+        assert client._remote_port == 9999
+
+    async def test_start_connects_via_tcp(self, tmp_path):
+        client = KotlinLspClient(str(tmp_path), port=8080)
+
+        mock_reader = AsyncMock()
+        mock_writer = MagicMock()
+        mock_writer.write = MagicMock()
+        mock_writer.close = MagicMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        mock_conn = AsyncMock()
+        mock_conn.send_request = AsyncMock(
+            return_value={"capabilities": {"completionProvider": {}}}
+        )
+        mock_conn.send_notification = AsyncMock()
+
+        with (
+            patch("kotlineer.client.asyncio.open_connection", new_callable=AsyncMock, return_value=(mock_reader, mock_writer)),
+            patch("kotlineer.client.LspConnection", return_value=mock_conn),
+        ):
+            caps = await client.start()
+
+        assert caps == {"completionProvider": {}}
+        assert client.is_running is True
+        mock_conn.start.assert_called_once()
+
+    async def test_stop_closes_socket(self, tmp_path):
+        client = KotlinLspClient(str(tmp_path))
+
+        mock_conn = AsyncMock()
+        mock_conn.send_request = AsyncMock(return_value=None)
+        mock_conn.send_notification = AsyncMock()
+
+        mock_writer = MagicMock()
+        mock_writer.close = MagicMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        mock_docs = AsyncMock()
+
+        client._connection = mock_conn
+        client._documents = mock_docs
+        client._socket_writer = mock_writer
+        client._capabilities = {"foo": "bar"}
+
+        await client.stop()
+
+        mock_writer.close.assert_called_once()
+        mock_writer.wait_closed.assert_called_once()
+        assert client._connection is None
+        assert client._socket_writer is None
+
+
+class TestSpawn:
+    def test_creates_subprocess_client(self, tmp_path):
+        client = KotlinLspClient.spawn(str(tmp_path), server_path="/bin/kls")
+        assert client._server is not None
+        assert client._config.server_path == "/bin/kls"
+
+    def test_default_server_path(self, tmp_path):
+        client = KotlinLspClient.spawn(str(tmp_path))
+        assert client._config.server_path == "kotlin-lsp"
+
+    async def test_start_launches_subprocess(self, tmp_path):
+        client = KotlinLspClient.spawn(str(tmp_path), server_path="/bin/kls")
 
         mock_process = AsyncMock()
         mock_reader = AsyncMock()
@@ -87,10 +159,8 @@ class TestClientStart:
         mock_conn.start.assert_called_once()
         mock_conn.send_notification.assert_called_once_with("initialized", {})
 
-
-class TestClientStop:
     async def test_stop_cleans_up(self, tmp_path):
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
+        client = KotlinLspClient.spawn(str(tmp_path), server_path="/bin/kls")
 
         mock_process = AsyncMock()
         mock_process.is_running = True
@@ -120,41 +190,32 @@ class TestClientStop:
 
 
 class TestClientDocumentHelpers:
+    def _make_client(self, tmp_path) -> KotlinLspClient:
+        """Create a client with mocked internals for document tests."""
+        client = KotlinLspClient(str(tmp_path))
+        mock_conn = AsyncMock()
+        mock_docs = AsyncMock()
+        client._connection = mock_conn
+        client._documents = mock_docs
+        return client
+
     async def test_open_file(self, tmp_path):
         kt_file = tmp_path / "Main.kt"
         kt_file.write_text("fun main() {}", encoding="utf-8")
 
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
-        mock_process = MagicMock()
-        mock_process.is_running = True
-        mock_conn = AsyncMock()
-        mock_docs = AsyncMock()
-
-        client._server = mock_process
-        client._connection = mock_conn
-        client._documents = mock_docs
-
+        client = self._make_client(tmp_path)
         uri = await client.open_file(str(kt_file))
 
         assert uri.startswith("file://")
         assert "Main.kt" in uri
-        mock_docs.open.assert_called_once()
+        client._documents.open.assert_called_once()
 
     async def test_open_file_relative(self, tmp_path):
         kt_file = tmp_path / "src" / "Main.kt"
         kt_file.parent.mkdir()
         kt_file.write_text("fun main() {}", encoding="utf-8")
 
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
-        mock_process = MagicMock()
-        mock_process.is_running = True
-        mock_conn = AsyncMock()
-        mock_docs = AsyncMock()
-
-        client._server = mock_process
-        client._connection = mock_conn
-        client._documents = mock_docs
-
+        client = self._make_client(tmp_path)
         uri = await client.open_file("src/Main.kt")
         assert "Main.kt" in uri
 
@@ -162,50 +223,29 @@ class TestClientDocumentHelpers:
         kt_file = tmp_path / "Main.kt"
         kt_file.write_text("v1", encoding="utf-8")
 
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
-        mock_process = MagicMock()
-        mock_process.is_running = True
-        mock_conn = AsyncMock()
-        mock_docs = AsyncMock()
-
-        client._server = mock_process
-        client._connection = mock_conn
-        client._documents = mock_docs
-
+        client = self._make_client(tmp_path)
         uri = await client.update_file(str(kt_file), "v2")
-        mock_docs.update.assert_called_once()
+        client._documents.update.assert_called_once()
 
     async def test_close_file(self, tmp_path):
         kt_file = tmp_path / "Main.kt"
         kt_file.write_text("", encoding="utf-8")
 
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
-        mock_process = MagicMock()
-        mock_process.is_running = True
-        mock_conn = AsyncMock()
-        mock_docs = AsyncMock()
-
-        client._server = mock_process
-        client._connection = mock_conn
-        client._documents = mock_docs
-
+        client = self._make_client(tmp_path)
         await client.close_file(str(kt_file))
-        mock_docs.close.assert_called_once()
+        client._documents.close.assert_called_once()
 
     async def test_open_file_not_running_raises(self, tmp_path):
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
+        client = KotlinLspClient(str(tmp_path))
         with pytest.raises(ServerNotRunningError):
             await client.open_file("Main.kt")
 
 
 class TestClientServices:
     def _make_running_client(self, tmp_path) -> KotlinLspClient:
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
-        mock_process = MagicMock()
-        mock_process.is_running = True
+        client = KotlinLspClient(str(tmp_path))
         mock_conn = MagicMock()
         mock_conn.on_notification = MagicMock()
-        client._server = mock_process
         client._connection = mock_conn
         return client
 
@@ -225,13 +265,13 @@ class TestClientServices:
         assert client.code_actions is not None
         assert client.refactoring is not None
         assert client.hierarchy is not None
-        assert client.kotlin is not None
+        assert client.jetbrains is not None
         assert client.diagnostics is not None
 
 
 class TestClientCapabilities:
     def test_client_capabilities_structure(self, tmp_path):
-        client = KotlinLspClient("/bin/kls", str(tmp_path))
+        client = KotlinLspClient(str(tmp_path))
         caps = client._client_capabilities()
 
         assert "textDocument" in caps
@@ -246,11 +286,7 @@ class TestClientCapabilities:
         assert "rename" in td
         assert "publishDiagnostics" in td
 
-    def test_snippets_reflect_config(self, tmp_path):
-        client = KotlinLspClient("/bin/kls", str(tmp_path), snippets_enabled=True)
+    def test_snippets_always_enabled(self, tmp_path):
+        client = KotlinLspClient(str(tmp_path))
         caps = client._client_capabilities()
         assert caps["textDocument"]["completion"]["completionItem"]["snippetSupport"] is True
-
-        client2 = KotlinLspClient("/bin/kls", str(tmp_path), snippets_enabled=False)
-        caps2 = client2._client_capabilities()
-        assert caps2["textDocument"]["completion"]["completionItem"]["snippetSupport"] is False

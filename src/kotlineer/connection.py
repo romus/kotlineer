@@ -181,8 +181,16 @@ class LspConnection:
 
         elif "method" in message and "id" in message:
             # Server request (e.g. window/showMessage, workspace/configuration)
-            # Respond with null for now — we don't handle server-initiated requests
             req_id = message["id"]
-            response = {"jsonrpc": "2.0", "id": req_id, "result": None}
+            method = message["method"]
+
+            if method == "workspace/configuration":
+                # Return an empty config object per requested item
+                items = (message.get("params") or {}).get("items", [{}])
+                result = [{} for _ in items]
+            else:
+                result = None
+
+            response = {"jsonrpc": "2.0", "id": req_id, "result": result}
             self._write_message(response)
-            logger.debug("← server request: %s (auto-responded with null)", message["method"])
+            logger.debug("← server request: %s (auto-responded)", method)

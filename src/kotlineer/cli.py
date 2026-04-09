@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from .client import KotlinLspClient
+from .client import DEFAULT_HOST, DEFAULT_PORT, KotlinLspClient
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +68,21 @@ def apply_text_edits(text: str, edits: list[dict[str, Any]]) -> str:
 
 @asynccontextmanager
 async def _open_client(args: argparse.Namespace):
-    client = KotlinLspClient(
-        server_path=args.server_path,
-        workspace_root=str(Path(args.workspace).resolve()),
-        request_timeout=args.timeout,
-    )
+    workspace = str(Path(args.workspace).resolve())
+    if args.spawn:
+        client = KotlinLspClient.spawn(
+            workspace,
+            server_path=args.server_path,
+            request_timeout=args.timeout,
+        )
+    else:
+        host, port_str = args.connect.rsplit(":", 1)
+        client = KotlinLspClient(
+            workspace,
+            host=host,
+            port=int(port_str),
+            request_timeout=args.timeout,
+        )
     try:
         await client.start()
         yield client
@@ -330,12 +340,22 @@ def _print_symbols(symbols: list[dict[str, Any]], indent: int) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="kotlineer",
-        description="CLI for kotlin-language-server",
+        description="CLI for JetBrains kotlin-lsp",
+    )
+    parser.add_argument(
+        "--connect",
+        default=f"{DEFAULT_HOST}:{DEFAULT_PORT}",
+        help=f"Connect to a running kotlin-lsp server at host:port (default: {DEFAULT_HOST}:{DEFAULT_PORT})",
+    )
+    parser.add_argument(
+        "--spawn",
+        action="store_true",
+        help="Launch a new kotlin-lsp subprocess instead of connecting to a running server",
     )
     parser.add_argument(
         "--server-path",
-        default=os.environ.get("KOTLINEER_SERVER", "kotlin-language-server"),
-        help="Path to kotlin-language-server binary (env: KOTLINEER_SERVER)",
+        default=os.environ.get("KOTLINEER_SERVER", "kotlin-lsp"),
+        help="Path to kotlin-lsp binary, used with --spawn (env: KOTLINEER_SERVER)",
     )
     parser.add_argument(
         "-w", "--workspace",

@@ -1,31 +1,22 @@
 # kotlineer
 
-Lightweight Python CLI and library for [kotlin-language-server](https://github.com/fwcd/kotlin-language-server). Run diagnostics, format code, navigate symbols and more — directly from the terminal.
+Lightweight Python CLI and library for [JetBrains kotlin-lsp](https://github.com/Kotlin/kotlin-lsp). Run diagnostics, format code, navigate symbols and more — directly from the terminal.
 
 ## Prerequisites
 
-### 1. Install kotlin-language-server
+### 1. Install kotlin-lsp
+
+Requires **Java 17+**.
 
 **macOS (Homebrew):**
 
 ```bash
-brew install kotlin-language-server
+brew install JetBrains/utils/kotlin-lsp
 ```
 
 **Manual install:**
 
-```bash
-# Download the latest release
-curl -L -o kls.zip https://github.com/fwcd/kotlin-language-server/releases/latest/download/server.zip
-unzip kls.zip -d kotlin-language-server
-export PATH="$PWD/kotlin-language-server/bin:$PATH"
-```
-
-Verify the installation:
-
-```bash
-kotlin-language-server --version
-```
+Download the latest release from [GitHub Releases](https://github.com/Kotlin/kotlin-lsp/releases), unpack it, and add to your PATH.
 
 ### 2. Install kotlineer
 
@@ -41,14 +32,22 @@ uv pip install kotlineer
 
 ## Quick start
 
-Navigate to your Kotlin/Spring Boot project and run a check:
+Start kotlin-lsp in socket mode (default port 8200):
+
+```bash
+kotlin-lsp --socket 8200
+```
+
+Then in another terminal, navigate to your Kotlin project and run:
 
 ```bash
 cd ~/projects/my-spring-app
 kotlineer check
 ```
 
-This will start kotlin-language-server, analyze all `.kt` files in the project and print diagnostics in a familiar format:
+By default kotlineer connects to a running kotlin-lsp at `localhost:8200`. This is faster than spawning a new process each time and allows sharing the server across tools.
+
+Output:
 
 ```
 src/main/kotlin/com/example/UserService.kt:15:9: error: Unresolved reference: userRepo
@@ -56,6 +55,14 @@ src/main/kotlin/com/example/AppConfig.kt:8:1: warning: Unused import directive
 ```
 
 Exit code is `1` if there are issues, `0` if clean.
+
+### Spawning a server on the fly
+
+If you prefer to launch a fresh server for each invocation (slower but no setup):
+
+```bash
+kotlineer --spawn check
+```
 
 ## Usage
 
@@ -135,7 +142,9 @@ kotlineer symbols --query UserService
 
 | Option | Description |
 |--------|-------------|
-| `--server-path PATH` | Path to `kotlin-language-server` binary (env: `KOTLINEER_SERVER`) |
+| `--connect HOST:PORT` | Connect to a running kotlin-lsp server (default: `localhost:8200`) |
+| `--spawn` | Launch a new kotlin-lsp subprocess instead of connecting |
+| `--server-path PATH` | Path to `kotlin-lsp` binary, used with `--spawn` (env: `KOTLINEER_SERVER`) |
 | `-w, --workspace DIR` | Project root directory (default: current directory) |
 | `--timeout SECONDS` | Request timeout (default: 30) |
 | `--json` | Output as JSON |
@@ -144,12 +153,18 @@ kotlineer symbols --query UserService
 ### Examples with options
 
 ```bash
-# Custom server path
-kotlineer --server-path /opt/kls/bin/kotlin-language-server check
+# Connect to a server on a custom host/port
+kotlineer --connect 10.0.0.5:9090 check
 
-# Via environment variable
-export KOTLINEER_SERVER=/opt/kls/bin/kotlin-language-server
-kotlineer check
+# Spawn a new server process
+kotlineer --spawn check
+
+# Spawn with a custom server path
+kotlineer --spawn --server-path /opt/kls/bin/kotlin-lsp check
+
+# Via environment variable (for --spawn mode)
+export KOTLINEER_SERVER=/opt/kls/bin/kotlin-lsp
+kotlineer --spawn check
 
 # Different workspace
 kotlineer -w ~/projects/my-spring-app check
@@ -162,6 +177,9 @@ kotlineer -v check src/main/kotlin/com/example/App.kt
 
 ```yaml
 # GitHub Actions
+- name: Start kotlin-lsp
+  run: kotlin-lsp --socket 8200 &
+
 - name: Check Kotlin code
   run: |
     kotlineer check --errors-only
@@ -170,15 +188,15 @@ kotlineer -v check src/main/kotlin/com/example/App.kt
 
 ## Using as a library
 
+### Connect to a running server (default)
+
 ```python
 import asyncio
 from kotlineer import KotlinLspClient
 
 async def main():
-    client = KotlinLspClient(
-        server_path="kotlin-language-server",
-        workspace_root="/path/to/my-spring-app",
-    )
+    # Connects to kotlin-lsp at localhost:8200
+    client = KotlinLspClient("/path/to/my-spring-app")
 
     await client.start()
 
@@ -202,4 +220,18 @@ async def main():
     await client.stop()
 
 asyncio.run(main())
+```
+
+### Custom host/port
+
+```python
+client = KotlinLspClient("/path/to/project", host="10.0.0.5", port=9090)
+```
+
+### Spawn a new server subprocess
+
+```python
+client = KotlinLspClient.spawn("/path/to/project")
+# or with a custom binary
+client = KotlinLspClient.spawn("/path/to/project", server_path="/opt/kls/bin/kotlin-lsp")
 ```
