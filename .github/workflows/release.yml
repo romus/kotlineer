@@ -1,0 +1,277 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  PYTHON_VERSION: "3.14"
+  HOMEBREW_PYTHON_FORMULA: ${{ vars.HOMEBREW_PYTHON_FORMULA != '' && vars.HOMEBREW_PYTHON_FORMULA || 'python@3.14' }}
+  HOMEBREW_TAP_BASE_BRANCH: ${{ vars.HOMEBREW_TAP_BASE_BRANCH != '' && vars.HOMEBREW_TAP_BASE_BRANCH || 'main' }}
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sdist_name: ${{ steps.artifacts.outputs.sdist_name }}
+      wheel_name: ${{ steps.artifacts.outputs.wheel_name }}
+      sha256: ${{ steps.sha.outputs.sha256 }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate Homebrew tap configuration
+        env:
+          HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+          HOMEBREW_TAP_PAT: ${{ secrets.HOMEBREW_TAP_PAT }}
+        run: |
+          test -n "$HOMEBREW_TAP_REPO" || {
+            echo "Repository variable HOMEBREW_TAP_REPO is required." >&2
+            exit 1
+          }
+          test -n "$HOMEBREW_TAP_PAT" || {
+            echo "Secret HOMEBREW_TAP_PAT is required." >&2
+            exit 1
+          }
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build hatchling -e ".[dev]"
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate package version matches git tag
+        env:
+          TAG_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          PACKAGE_VERSION=$(python -c "import kotlineer; print(kotlineer.__version__)")
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "Package version $PACKAGE_VERSION does not match tag $TAG_VERSION" >&2
+            exit 1
+          fi
+
+      - name: Build distribution artifacts
+        run: python -m build --sdist --wheel
+
+      - name: Resolve artifact names
+        id: artifacts
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          echo "sdist_name=kotlineer-${VERSION}.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "wheel_name=kotlineer-${VERSION}-py3-none-any.whl" >> "$GITHUB_OUTPUT"
+
+      - name: Compute SHA256
+        id: sha
+        env:
+          SDIST_NAME: ${{ steps.artifacts.outputs.sdist_name }}
+        run: |
+          SHA=$(sha256sum "dist/${SDIST_NAME}" | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Homebrew Source SHA256"
+            echo
+            echo '```'
+            echo "$SHA"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate changelog
+        id: changelog
+        shell: bash
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+
+          COMMITS=$(git log "$RANGE" --pretty=format:"%s" --no-merges)
+
+          FEATURES=""
+          FIXES=""
+          PERF=""
+          OTHER=""
+
+          while IFS= read -r msg; do
+            [ -z "$msg" ] && continue
+            clean=$(echo "$msg" | sed -E 's/ \(#[0-9]+\)$//')
+            if echo "$msg" | grep -qiE "^feat(\(.+\))?:"; then
+              entry=$(echo "$clean" | sed -E 's/^feat(\(.+\))?: //')
+              FEATURES="${FEATURES}- ${entry}\n"
+            elif echo "$msg" | grep -qiE "^fix(\(.+\))?:"; then
+              entry=$(echo "$clean" | sed -E 's/^fix(\(.+\))?: //')
+              FIXES="${FIXES}- ${entry}\n"
+            elif echo "$msg" | grep -qiE "^perf(\(.+\))?:"; then
+              entry=$(echo "$clean" | sed -E 's/^perf(\(.+\))?: //')
+              PERF="${PERF}- ${entry}\n"
+            elif echo "$msg" | grep -qiE "^(chore|docs|refactor|test|style|ci|build)(\(.+\))?:"; then
+              entry=$(echo "$clean" | sed -E 's/^(chore|docs|refactor|test|style|ci|build)(\(.+\))?: //')
+              OTHER="${OTHER}- ${entry}\n"
+            else
+              OTHER="${OTHER}- ${clean}\n"
+            fi
+          done <<< "$COMMITS"
+
+          CHANGELOG=""
+          [ -n "$FEATURES" ] && CHANGELOG="${CHANGELOG}### New Features\n${FEATURES}\n"
+          [ -n "$FIXES" ] && CHANGELOG="${CHANGELOG}### Bug Fixes\n${FIXES}\n"
+          [ -n "$PERF" ] && CHANGELOG="${CHANGELOG}### Performance\n${PERF}\n"
+          [ -n "$OTHER" ] && CHANGELOG="${CHANGELOG}### Other Changes\n${OTHER}\n"
+
+          {
+            echo "changelog<<EOF"
+            echo -e "$CHANGELOG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            dist/${{ steps.artifacts.outputs.sdist_name }}
+            dist/${{ steps.artifacts.outputs.wheel_name }}
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/${{ steps.artifacts.outputs.sdist_name }}
+            dist/${{ steps.artifacts.outputs.wheel_name }}
+          body: |
+            ## kotlineer v${{ steps.version.outputs.version }}
+
+            ${{ steps.changelog.outputs.changelog }}
+            ### Install via Homebrew
+            ```bash
+            brew tap ${{ vars.HOMEBREW_TAP_REPO }}
+            brew install kotlineer
+            ```
+
+            ### SHA256
+            ```
+            ${{ steps.sha.outputs.sha256 }}
+            ```
+          draft: false
+          prerelease: false
+
+  brew-smoke-test:
+    runs-on: macos-latest
+    needs: build-release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Generate local Homebrew formula
+        env:
+          VERSION: ${{ needs.build-release.outputs.version }}
+          SDIST_NAME: ${{ needs.build-release.outputs.sdist_name }}
+          SHA256: ${{ needs.build-release.outputs.sha256 }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 scripts/render_homebrew_formula.py \
+            --version "$VERSION" \
+            --url "file://${GITHUB_WORKSPACE}/dist/${SDIST_NAME}" \
+            --sha256 "$SHA256" \
+            --homepage "${GITHUB_SERVER_URL}/${REPOSITORY}" \
+            --python-formula "${HOMEBREW_PYTHON_FORMULA}" \
+            --output "${RUNNER_TEMP}/kotlineer.rb"
+
+      - name: Create temporary Homebrew tap
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          brew tap-new local/kotlineer
+          TAP_DIR="$(brew --repository)/Library/Taps/local/homebrew-kotlineer"
+          mkdir -p "${TAP_DIR}/Formula"
+          cp "${RUNNER_TEMP}/kotlineer.rb" "${TAP_DIR}/Formula/kotlineer.rb"
+
+      - name: Install formula from temporary tap
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install local/kotlineer/kotlineer
+
+      - name: Verify installed command
+        run: |
+          kotlineer --version | grep "${{ needs.build-release.outputs.version }}"
+          brew test kotlineer
+
+  update-homebrew-tap:
+    runs-on: ubuntu-latest
+    needs:
+      - build-release
+      - brew-smoke-test
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.HOMEBREW_TAP_REPO }}
+          token: ${{ secrets.HOMEBREW_TAP_PAT }}
+          ref: ${{ env.HOMEBREW_TAP_BASE_BRANCH }}
+          path: homebrew-tap
+
+      - name: Render formula for release tarball
+        env:
+          VERSION: ${{ needs.build-release.outputs.version }}
+          SDIST_NAME: ${{ needs.build-release.outputs.sdist_name }}
+          SHA256: ${{ needs.build-release.outputs.sha256 }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 scripts/render_homebrew_formula.py \
+            --version "$VERSION" \
+            --url "${GITHUB_SERVER_URL}/${REPOSITORY}/releases/download/v${VERSION}/${SDIST_NAME}" \
+            --sha256 "$SHA256" \
+            --homepage "${GITHUB_SERVER_URL}/${REPOSITORY}" \
+            --python-formula "${HOMEBREW_PYTHON_FORMULA}" \
+            --output "homebrew-tap/Formula/kotlineer.rb"
+
+      - name: Create pull request in tap repository
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.HOMEBREW_TAP_PAT }}
+          path: homebrew-tap
+          branch: release/kotlineer-v${{ needs.build-release.outputs.version }}
+          base: ${{ env.HOMEBREW_TAP_BASE_BRANCH }}
+          commit-message: |
+            chore: update kotlineer to v${{ needs.build-release.outputs.version }}
+          title: |
+            chore: update kotlineer to v${{ needs.build-release.outputs.version }}
+          body: |
+            Update Homebrew formula for kotlineer v${{ needs.build-release.outputs.version }}.
+
+            - Source: ${{ github.server_url }}/${{ github.repository }}/releases/download/v${{ needs.build-release.outputs.version }}/${{ needs.build-release.outputs.sdist_name }}
+            - SHA256: `${{ needs.build-release.outputs.sha256 }}`
+          add-paths: |
+            Formula/kotlineer.rb
