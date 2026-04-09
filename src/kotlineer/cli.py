@@ -32,9 +32,7 @@ def _uri_to_path(uri: str) -> str:
 
 def find_kotlin_files(workspace: Path) -> list[Path]:
     return sorted(
-        p
-        for p in workspace.rglob("*.kt")
-        if not any(part in IGNORE_DIRS for part in p.parts)
+        p for p in workspace.rglob("*.kt") if not any(part in IGNORE_DIRS for part in p.parts)
     )
 
 
@@ -162,9 +160,7 @@ async def cmd_check(args: argparse.Namespace) -> int:
             )
 
         all_diags = (
-            client.diagnostics.get_errors()
-            if args.errors_only
-            else client.diagnostics.get()
+            client.diagnostics.get_errors() if args.errors_only else client.diagnostics.get()
         )
 
     if args.json:
@@ -323,13 +319,32 @@ async def cmd_symbols(args: argparse.Namespace) -> int:
 
 def _print_symbols(symbols: list[dict[str, Any]], indent: int) -> None:
     kind_names = {
-        1: "File", 2: "Module", 3: "Namespace", 4: "Package",
-        5: "Class", 6: "Method", 7: "Property", 8: "Field",
-        9: "Constructor", 10: "Enum", 11: "Interface", 12: "Function",
-        13: "Variable", 14: "Constant", 15: "String", 16: "Number",
-        17: "Boolean", 18: "Array", 19: "Object", 20: "Key",
-        21: "Null", 22: "EnumMember", 23: "Struct", 24: "Event",
-        25: "Operator", 26: "TypeParameter",
+        1: "File",
+        2: "Module",
+        3: "Namespace",
+        4: "Package",
+        5: "Class",
+        6: "Method",
+        7: "Property",
+        8: "Field",
+        9: "Constructor",
+        10: "Enum",
+        11: "Interface",
+        12: "Function",
+        13: "Variable",
+        14: "Constant",
+        15: "String",
+        16: "Number",
+        17: "Boolean",
+        18: "Array",
+        19: "Object",
+        20: "Key",
+        21: "Null",
+        22: "EnumMember",
+        23: "Struct",
+        24: "Event",
+        25: "Operator",
+        26: "TypeParameter",
     }
     for sym in symbols:
         kind = kind_names.get(sym.get("kind", 0), "?")
@@ -369,7 +384,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to kotlin-lsp binary (env: KOTLINEER_SERVER)",
     )
     parser.add_argument(
-        "-w", "--workspace",
+        "-w",
+        "--workspace",
         default=".",
         help="Project root directory (default: cwd)",
     )
@@ -385,7 +401,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output as JSON",
     )
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Enable debug logging",
     )
@@ -397,7 +414,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_check.add_argument("files", nargs="*", help="Files to check (default: all .kt in workspace)")
     p_check.add_argument("--errors-only", action="store_true", help="Show only errors")
     p_check.add_argument(
-        "--settle-time", type=float, default=3.0,
+        "--settle-time",
+        type=float,
+        default=3.0,
         help="Seconds to wait after last diagnostic update (default: 3)",
     )
     p_check.set_defaults(func=cmd_check)
@@ -405,7 +424,9 @@ def build_parser() -> argparse.ArgumentParser:
     # format
     p_fmt = sub.add_parser("format", help="Format Kotlin files")
     p_fmt.add_argument("files", nargs="*", help="Files to format (default: all .kt in workspace)")
-    p_fmt.add_argument("--check", action="store_true", dest="check", help="Dry-run: exit 1 if changes needed")
+    p_fmt.add_argument(
+        "--check", action="store_true", dest="check", help="Dry-run: exit 1 if changes needed"
+    )
     p_fmt.add_argument("--diff", action="store_true", help="Print unified diff instead of writing")
     p_fmt.set_defaults(func=cmd_format)
 

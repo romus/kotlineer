@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -87,7 +86,11 @@ class TestDefaultConstructor:
         mock_conn.send_notification = AsyncMock()
 
         with (
-            patch("kotlineer.client.asyncio.open_connection", new_callable=AsyncMock, return_value=(mock_reader, mock_writer)),
+            patch(
+                "kotlineer.client.asyncio.open_connection",
+                new_callable=AsyncMock,
+                return_value=(mock_reader, mock_writer),
+            ),
             patch("kotlineer.client.LspConnection", return_value=mock_conn),
         ):
             caps = await client.start()
@@ -224,7 +227,7 @@ class TestClientDocumentHelpers:
         kt_file.write_text("v1", encoding="utf-8")
 
         client = self._make_client(tmp_path)
-        uri = await client.update_file(str(kt_file), "v2")
+        await client.update_file(str(kt_file), "v2")
         client._documents.update.assert_called_once()
 
     async def test_close_file(self, tmp_path):

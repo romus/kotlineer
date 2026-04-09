@@ -1,19 +1,17 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
+from kotlineer.services.code_actions import CodeActionService
 from kotlineer.services.completion import CompletionService
 from kotlineer.services.diagnostics import DiagnosticsService
 from kotlineer.services.formatting import FormattingService
-from kotlineer.services.hover import HoverService
-from kotlineer.services.navigation import NavigationService
-from kotlineer.services.symbols import SymbolService
-from kotlineer.services.code_actions import CodeActionService
 from kotlineer.services.hierarchy import HierarchyService
-from kotlineer.services.refactoring import RefactoringService
+from kotlineer.services.hover import HoverService
 from kotlineer.services.jetbrains_extensions import JetBrainsExtensionService
+from kotlineer.services.navigation import NavigationService
+from kotlineer.services.refactoring import RefactoringService
+from kotlineer.services.symbols import SymbolService
 
 
 def _mock_conn(return_value=None) -> AsyncMock:
@@ -80,7 +78,7 @@ class TestHoverService:
         conn = _mock_conn(return_value={"signatures": []})
         svc = HoverService(conn)
 
-        result = await svc.signature_help("file:///a.kt", 3, 10)
+        await svc.signature_help("file:///a.kt", 3, 10)
 
         conn.send_request.assert_called_once_with(
             "textDocument/signatureHelp",
@@ -226,7 +224,7 @@ class TestCodeActionService:
         action = {"title": "Fix"}
         conn = _mock_conn(return_value={**action, "edit": {}})
         svc = CodeActionService(conn)
-        result = await svc.resolve(action)
+        await svc.resolve(action)
         conn.send_request.assert_called_once_with("codeAction/resolve", action)
 
     async def test_code_lens(self):
@@ -252,7 +250,7 @@ class TestHierarchyService:
     async def test_prepare_call_hierarchy(self):
         conn = _mock_conn(return_value=[{"name": "foo"}])
         svc = HierarchyService(conn)
-        result = await svc.prepare_call_hierarchy("file:///a.kt", 1, 2)
+        await svc.prepare_call_hierarchy("file:///a.kt", 1, 2)
         conn.send_request.assert_called_once_with(
             "textDocument/prepareCallHierarchy",
             {
@@ -270,7 +268,7 @@ class TestHierarchyService:
             [{"from": {"name": "bar"}}],
         ]
         svc = HierarchyService(conn)
-        result = await svc.incoming_calls("file:///a.kt", 1, 2)
+        await svc.incoming_calls("file:///a.kt", 1, 2)
 
         assert conn.send_request.call_count == 2
         second_call = conn.send_request.call_args_list[1]
@@ -291,7 +289,7 @@ class TestHierarchyService:
             [{"to": {"name": "baz"}}],
         ]
         svc = HierarchyService(conn)
-        result = await svc.outgoing_calls("file:///a.kt", 1, 2)
+        await svc.outgoing_calls("file:///a.kt", 1, 2)
 
         second_call = conn.send_request.call_args_list[1]
         assert second_call[0][0] == "callHierarchy/outgoingCalls"
@@ -309,7 +307,7 @@ class TestHierarchyService:
             [{"name": "Parent"}],
         ]
         svc = HierarchyService(conn)
-        result = await svc.supertypes("file:///a.kt", 1, 2)
+        await svc.supertypes("file:///a.kt", 1, 2)
         assert conn.send_request.call_args_list[1][0][0] == "typeHierarchy/supertypes"
 
     async def test_subtypes(self):
@@ -319,7 +317,7 @@ class TestHierarchyService:
             [{"name": "Child"}],
         ]
         svc = HierarchyService(conn)
-        result = await svc.subtypes("file:///a.kt", 1, 2)
+        await svc.subtypes("file:///a.kt", 1, 2)
         assert conn.send_request.call_args_list[1][0][0] == "typeHierarchy/subtypes"
 
     async def test_supertypes_no_items(self):
@@ -335,7 +333,7 @@ class TestRefactoringService:
     async def test_rename(self):
         conn = _mock_conn(return_value={"changes": {}})
         svc = RefactoringService(conn)
-        result = await svc.rename("file:///a.kt", 5, 3, "newName")
+        await svc.rename("file:///a.kt", 5, 3, "newName")
         args = conn.send_request.call_args[0]
         assert args[0] == "textDocument/rename"
         assert args[1]["newName"] == "newName"
@@ -384,10 +382,12 @@ class TestDiagnosticsService:
         conn = _mock_conn()
         svc = DiagnosticsService(conn)
 
-        svc._on_diagnostics({
-            "uri": "file:///a.kt",
-            "diagnostics": [{"message": "err", "severity": 1}],
-        })
+        svc._on_diagnostics(
+            {
+                "uri": "file:///a.kt",
+                "diagnostics": [{"message": "err", "severity": 1}],
+            }
+        )
 
         result = svc.get("file:///a.kt")
         assert len(result["file:///a.kt"]) == 1
@@ -408,13 +408,15 @@ class TestDiagnosticsService:
         conn = _mock_conn()
         svc = DiagnosticsService(conn)
 
-        svc._on_diagnostics({
-            "uri": "file:///a.kt",
-            "diagnostics": [
-                {"message": "error", "severity": 1},
-                {"message": "warning", "severity": 2},
-            ],
-        })
+        svc._on_diagnostics(
+            {
+                "uri": "file:///a.kt",
+                "diagnostics": [
+                    {"message": "error", "severity": 1},
+                    {"message": "warning", "severity": 2},
+                ],
+            }
+        )
 
         errors = svc.get_errors("file:///a.kt")
         assert len(errors["file:///a.kt"]) == 1
@@ -424,13 +426,15 @@ class TestDiagnosticsService:
         conn = _mock_conn()
         svc = DiagnosticsService(conn)
 
-        svc._on_diagnostics({
-            "uri": "file:///a.kt",
-            "diagnostics": [
-                {"message": "error", "severity": 1},
-                {"message": "warning", "severity": 2},
-            ],
-        })
+        svc._on_diagnostics(
+            {
+                "uri": "file:///a.kt",
+                "diagnostics": [
+                    {"message": "error", "severity": 1},
+                    {"message": "warning", "severity": 2},
+                ],
+            }
+        )
 
         warnings = svc.get_warnings("file:///a.kt")
         assert len(warnings["file:///a.kt"]) == 1
@@ -440,10 +444,12 @@ class TestDiagnosticsService:
         conn = _mock_conn()
         svc = DiagnosticsService(conn)
 
-        svc._on_diagnostics({
-            "uri": "file:///a.kt",
-            "diagnostics": [{"message": "warn", "severity": 2}],
-        })
+        svc._on_diagnostics(
+            {
+                "uri": "file:///a.kt",
+                "diagnostics": [{"message": "warn", "severity": 2}],
+            }
+        )
 
         errors = svc.get_errors("file:///a.kt")
         assert errors == {}
@@ -473,7 +479,9 @@ class TestDiagnosticsService:
         conn = _mock_conn()
         svc = DiagnosticsService(conn)
 
-        svc._on_diagnostics({"uri": "file:///a.kt", "diagnostics": [{"severity": 1}, {"severity": 2}]})
+        svc._on_diagnostics(
+            {"uri": "file:///a.kt", "diagnostics": [{"severity": 1}, {"severity": 2}]}
+        )
         svc._on_diagnostics({"uri": "file:///a.kt", "diagnostics": []})
 
         assert svc.get("file:///a.kt") == {"file:///a.kt": []}

@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from .types import LspError, RequestTimeoutError
 
@@ -72,7 +73,7 @@ class LspConnection:
         try:
             result = await asyncio.wait_for(future, timeout=self._request_timeout)
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._pending.pop(request_id, None)
             raise RequestTimeoutError(method, self._request_timeout)
 

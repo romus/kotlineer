@@ -167,13 +167,17 @@ class TestSendRequest:
 
 class TestNotificationHandlers:
     async def test_dispatches_to_handler(self):
-        notification = _make_notification("textDocument/publishDiagnostics", {"uri": "f", "diagnostics": []})
+        notification = _make_notification(
+            "textDocument/publishDiagnostics", {"uri": "f", "diagnostics": []}
+        )
         reader = asyncio.StreamReader()
         writer = FakeWriter()
         conn = LspConnection(reader, writer, request_timeout=5.0)  # type: ignore[arg-type]
 
         received = []
-        conn.on_notification("textDocument/publishDiagnostics", lambda params: received.append(params))
+        conn.on_notification(
+            "textDocument/publishDiagnostics", lambda params: received.append(params)
+        )
 
         await conn.start()
         reader.feed_data(notification)

@@ -72,7 +72,7 @@ class ServerProcess:
             try:
                 self._process.terminate()
                 await asyncio.wait_for(self._process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("Server did not terminate, killing")
                 self._process.kill()
                 await self._process.wait()
@@ -89,7 +89,10 @@ class ServerProcess:
         self._stderr_task = None
 
     async def wait(self) -> int:
-        """Wait for the process to exit and return exit code. Raises ServerCrashedError on non-zero."""
+        """Wait for the process to exit and return exit code.
+
+        Raises ServerCrashedError on non-zero.
+        """
         if self._process is None:
             raise RuntimeError("Server process is not started")
         code = await self._process.wait()

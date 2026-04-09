@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 from argparse import Namespace
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from kotlineer.cli import (
+    _print_locations,
+    _print_symbols,
+    _resolve_files,
+    _uri_to_path,
     apply_text_edits,
     build_parser,
     cmd_check,
@@ -17,12 +20,7 @@ from kotlineer.cli import (
     cmd_references,
     cmd_symbols,
     find_kotlin_files,
-    _print_locations,
-    _print_symbols,
-    _resolve_files,
-    _uri_to_path,
 )
-
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
@@ -334,12 +332,18 @@ class TestPrintSymbols:
             {
                 "name": "MyClass",
                 "kind": 5,
-                "range": {"start": {"line": 0, "character": 0}, "end": {"line": 10, "character": 0}},
+                "range": {
+                    "start": {"line": 0, "character": 0},
+                    "end": {"line": 10, "character": 0},
+                },
                 "children": [
                     {
                         "name": "myMethod",
                         "kind": 6,
-                        "range": {"start": {"line": 2, "character": 4}, "end": {"line": 5, "character": 4}},
+                        "range": {
+                            "start": {"line": 2, "character": 4},
+                            "end": {"line": 5, "character": 4},
+                        },
                         "children": [],
                     }
                 ],
@@ -357,7 +361,10 @@ class TestPrintSymbols:
                 "kind": 12,
                 "location": {
                     "uri": "file:///a.kt",
-                    "range": {"start": {"line": 5, "character": 0}, "end": {"line": 5, "character": 10}},
+                    "range": {
+                        "start": {"line": 5, "character": 0},
+                        "end": {"line": 5, "character": 10},
+                    },
                 },
             }
         ]
@@ -413,8 +420,10 @@ class TestCmdCheck:
         client.diagnostics.get.return_value = {"file:///App.kt": []}
 
         args = _make_args(
-            files=[str(kt)], workspace=str(tmp_path),
-            errors_only=False, settle_time=0.1,
+            files=[str(kt)],
+            workspace=str(tmp_path),
+            errors_only=False,
+            settle_time=0.1,
         )
 
         with patch("kotlineer.cli._open_client") as mock_ctx:
@@ -432,7 +441,10 @@ class TestCmdCheck:
         diags = {
             "file:///Bad.kt": [
                 {
-                    "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 3}},
+                    "range": {
+                        "start": {"line": 0, "character": 0},
+                        "end": {"line": 0, "character": 3},
+                    },
                     "severity": 1,
                     "message": "Unresolved reference",
                 }
@@ -443,8 +455,10 @@ class TestCmdCheck:
         client.diagnostics.get.return_value = diags
 
         args = _make_args(
-            files=[str(kt)], workspace=str(tmp_path),
-            errors_only=False, settle_time=0.1,
+            files=[str(kt)],
+            workspace=str(tmp_path),
+            errors_only=False,
+            settle_time=0.1,
         )
 
         with patch("kotlineer.cli._open_client") as mock_ctx:
@@ -465,7 +479,10 @@ class TestCmdCheck:
         diags = {
             "file:///Bad.kt": [
                 {
-                    "range": {"start": {"line": 2, "character": 5}, "end": {"line": 2, "character": 8}},
+                    "range": {
+                        "start": {"line": 2, "character": 5},
+                        "end": {"line": 2, "character": 8},
+                    },
                     "severity": 2,
                     "message": "Unused variable",
                 }
@@ -476,8 +493,11 @@ class TestCmdCheck:
         client.diagnostics.get.return_value = diags
 
         args = _make_args(
-            files=[str(kt)], workspace=str(tmp_path),
-            errors_only=False, settle_time=0.1, json=True,
+            files=[str(kt)],
+            workspace=str(tmp_path),
+            errors_only=False,
+            settle_time=0.1,
+            json=True,
         )
 
         with patch("kotlineer.cli._open_client") as mock_ctx:
@@ -501,8 +521,10 @@ class TestCmdCheck:
         client.diagnostics.get_errors.return_value = {}
 
         args = _make_args(
-            files=[str(kt)], workspace=str(tmp_path),
-            errors_only=True, settle_time=0.1,
+            files=[str(kt)],
+            workspace=str(tmp_path),
+            errors_only=True,
+            settle_time=0.1,
         )
 
         with patch("kotlineer.cli._open_client") as mock_ctx:
@@ -729,7 +751,10 @@ class TestCmdReferences:
             },
             {
                 "uri": "file:///b.kt",
-                "range": {"start": {"line": 3, "character": 8}, "end": {"line": 3, "character": 13}},
+                "range": {
+                    "start": {"line": 3, "character": 8},
+                    "end": {"line": 3, "character": 13},
+                },
             },
         ]
         client = _mock_client()
@@ -754,7 +779,10 @@ class TestCmdSymbols:
             {
                 "name": "App",
                 "kind": 5,
-                "range": {"start": {"line": 0, "character": 0}, "end": {"line": 10, "character": 0}},
+                "range": {
+                    "start": {"line": 0, "character": 0},
+                    "end": {"line": 10, "character": 0},
+                },
                 "children": [],
             }
         ]
@@ -778,7 +806,10 @@ class TestCmdSymbols:
                 "kind": 5,
                 "location": {
                     "uri": "file:///src/UserService.kt",
-                    "range": {"start": {"line": 2, "character": 0}, "end": {"line": 20, "character": 0}},
+                    "range": {
+                        "start": {"line": 2, "character": 0},
+                        "end": {"line": 20, "character": 0},
+                    },
                 },
             }
         ]
@@ -811,7 +842,14 @@ class TestCmdSymbols:
         assert "No symbols" in capsys.readouterr().err
 
     async def test_symbols_json(self, tmp_path, capsys):
-        syms = [{"name": "Foo", "kind": 5, "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}}, "children": []}]
+        syms = [
+            {
+                "name": "Foo",
+                "kind": 5,
+                "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
+                "children": [],
+            }
+        ]
         client = _mock_client()
         client.symbols.document_symbols = AsyncMock(return_value=syms)
 
