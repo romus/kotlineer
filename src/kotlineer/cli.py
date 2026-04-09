@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from . import __version__
 from .client import DEFAULT_HOST, DEFAULT_PORT, KotlinLspClient
 
 logger = logging.getLogger(__name__)
@@ -342,6 +343,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="kotlineer",
         description="CLI for JetBrains kotlin-lsp",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument(
         "--connect",
         default=f"{DEFAULT_HOST}:{DEFAULT_PORT}",
