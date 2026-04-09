@@ -79,6 +79,7 @@ client = KotlinLspClient.spawn("/path/to/project")
 
 | Document | Description |
 |----------|-------------|
+| [Quick Start](docs/quickstart.md) | Install, run, and check your first Kotlin file in 5 minutes |
 | [CLI Reference](docs/cli.md) | All commands, options, flags, and output formats |
 | [Library Reference](docs/library.md) | Full Python API: client construction, services, error handling |
 | [Use Cases](docs/use-cases.md) | CI/CD, pre-commit hooks, code analysis, batch refactoring, multi-project setups |

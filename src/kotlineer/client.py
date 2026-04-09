@@ -164,8 +164,11 @@ class KotlinLspClient:
 
         if self._connection:
             try:
-                await self._connection.send_request("shutdown")
-                await self._connection.send_notification("exit")
+                if self._server is not None:
+                    # Only send shutdown/exit when we spawned the server ourselves.
+                    # For external servers we just close the connection.
+                    await self._connection.send_request("shutdown")
+                    await self._connection.send_notification("exit")
             except Exception:
                 logger.debug("Error during LSP shutdown", exc_info=True)
             await self._connection.close()

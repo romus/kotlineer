@@ -1,4 +1,4 @@
-.PHONY: install install-dev build clean test lint typecheck fmt check all
+.PHONY: install install-dev build clean test lint typecheck fmt check all pipx-install pipx-uninstall
 
 # ── Setup ───────────────────────────────────────────────────────────
 
@@ -45,6 +45,14 @@ fmt-check:
 
 typecheck:
 	uv run mypy src/
+
+# ── Local install ──────────────────────────────────────────────────
+
+pipx-install: build
+	pipx install dist/*.whl --force
+
+pipx-uninstall:
+	pipx uninstall kotlineer
 
 # ── All checks ──────────────────────────────────────────────────────
 

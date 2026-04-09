@@ -110,7 +110,7 @@ async def _wait_for_diagnostics(
     settle: float = 3.0,
 ) -> None:
     loop = asyncio.get_event_loop()
-    last_update = loop.time()
+    last_update: float | None = None  # None until first diagnostic arrives
 
     def on_diag(_uri: str, _diags: list) -> None:
         nonlocal last_update
@@ -123,9 +123,10 @@ async def _wait_for_diagnostics(
         now = loop.time()
         if now > deadline:
             break
-        if now - last_update >= settle:
+        # Only apply settle logic after at least one diagnostic arrived
+        if last_update is not None and now - last_update >= settle:
             break
-        await asyncio.sleep(min(0.5, settle - (now - last_update)))
+        await asyncio.sleep(0.5)
 
 
 # ── Subcommands ─────────────────────────────────────────────────────
@@ -138,14 +139,27 @@ async def cmd_check(args: argparse.Namespace) -> int:
         return 0
 
     async with _open_client(args) as client:
-        for f in files:
-            await client.open_file(str(f))
+        # Ensure DiagnosticsService (and its notification handler) is
+        # created before opening files so that no server-pushed
+        # diagnostics are lost.
+        _ = client.diagnostics
 
-        await _wait_for_diagnostics(
-            client,
-            timeout=args.timeout,
-            settle=args.settle_time,
-        )
+        uris: list[str] = []
+        for f in files:
+            uris.append(await client.open_file(str(f)))
+
+        # Use pull model if the server advertises diagnosticProvider,
+        # otherwise fall back to waiting for pushed notifications.
+        caps = client.capabilities or {}
+        if caps.get("diagnosticProvider"):
+            for uri in uris:
+                await client.diagnostics.pull(uri)
+        else:
+            await _wait_for_diagnostics(
+                client,
+                timeout=args.timeout,
+                settle=args.settle_time,
+            )
 
         all_diags = (
             client.diagnostics.get_errors()
