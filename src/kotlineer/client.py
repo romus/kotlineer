@@ -37,8 +37,8 @@ DEFAULT_PORT = 8200
 class KotlinLspClient:
     """Main facade for interacting with JetBrains kotlin-lsp.
 
-    By default connects to an already-running server via TCP.
-    Use ``KotlinLspClient.spawn()`` to launch a new server subprocess instead.
+    By default spawns a new server subprocess via ``KotlinLspClient.spawn()``.
+    Use the constructor directly to connect to an already-running server via TCP.
     """
 
     def __init__(

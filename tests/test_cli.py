@@ -266,20 +266,10 @@ class TestBuildParser:
         args = parser.parse_args(["--connect", "10.0.0.1:9999", "check"])
         assert args.connect == "10.0.0.1:9999"
 
-    def test_connect_default(self):
+    def test_connect_default_is_none(self):
         parser = build_parser()
         args = parser.parse_args(["check"])
-        assert args.connect == "localhost:8200"
-
-    def test_spawn_flag(self):
-        parser = build_parser()
-        args = parser.parse_args(["--spawn", "check"])
-        assert args.spawn is True
-
-    def test_spawn_default_is_false(self):
-        parser = build_parser()
-        args = parser.parse_args(["check"])
-        assert args.spawn is False
+        assert args.connect is None
 
     def test_no_subcommand_raises(self):
         parser = build_parser()
@@ -397,8 +387,10 @@ def _mock_client():
     client.start = AsyncMock()
     client.stop = AsyncMock()
     client.open_file = AsyncMock(return_value="file:///tmp/proj/Main.kt")
+    client.capabilities = {}
     client.diagnostics = MagicMock()
     client.diagnostics.on_update = MagicMock()
+    client.diagnostics.pull = AsyncMock()
     client.formatting = AsyncMock()
     client.hover = AsyncMock()
     client.navigation = AsyncMock()

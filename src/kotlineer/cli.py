@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from . import __version__
-from .client import DEFAULT_HOST, DEFAULT_PORT, KotlinLspClient
+from .client import KotlinLspClient
 
 logger = logging.getLogger(__name__)
 
@@ -70,18 +70,18 @@ def apply_text_edits(text: str, edits: list[dict[str, Any]]) -> str:
 @asynccontextmanager
 async def _open_client(args: argparse.Namespace):
     workspace = str(Path(args.workspace).resolve())
-    if args.spawn:
-        client = KotlinLspClient.spawn(
-            workspace,
-            server_path=args.server_path,
-            request_timeout=args.timeout,
-        )
-    else:
+    if args.connect:
         host, port_str = args.connect.rsplit(":", 1)
         client = KotlinLspClient(
             workspace,
             host=host,
             port=int(port_str),
+            request_timeout=args.timeout,
+        )
+    else:
+        client = KotlinLspClient.spawn(
+            workspace,
+            server_path=args.server_path,
             request_timeout=args.timeout,
         )
     try:
@@ -360,18 +360,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument(
         "--connect",
-        default=f"{DEFAULT_HOST}:{DEFAULT_PORT}",
-        help=f"Connect to a running kotlin-lsp server at host:port (default: {DEFAULT_HOST}:{DEFAULT_PORT})",
-    )
-    parser.add_argument(
-        "--spawn",
-        action="store_true",
-        help="Launch a new kotlin-lsp subprocess instead of connecting to a running server",
+        default=None,
+        help="Connect to a running kotlin-lsp server at host:port instead of spawning a new one",
     )
     parser.add_argument(
         "--server-path",
         default=os.environ.get("KOTLINEER_SERVER", "kotlin-lsp"),
-        help="Path to kotlin-lsp binary, used with --spawn (env: KOTLINEER_SERVER)",
+        help="Path to kotlin-lsp binary (env: KOTLINEER_SERVER)",
     )
     parser.add_argument(
         "-w", "--workspace",

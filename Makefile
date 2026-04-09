@@ -20,30 +20,30 @@ clean:
 
 # ── Test ────────────────────────────────────────────────────────────
 
-test:
+test: install-dev
 	uv run python -m pytest -v
 
-test-unit:
+test-unit: install-dev
 	uv run python -m pytest tests/ -v -k "not integration"
 
-test-integration:
+test-integration: install-dev
 	uv run python -m pytest tests/ -v -k "integration"
 
 # ── Quality ─────────────────────────────────────────────────────────
 
-lint:
+lint: install-dev
 	uv run ruff check src/ tests/
 
-lint-fix:
+lint-fix: install-dev
 	uv run ruff check --fix src/ tests/
 
-fmt:
+fmt: install-dev
 	uv run ruff format src/ tests/
 
-fmt-check:
+fmt-check: install-dev
 	uv run ruff format --check src/ tests/
 
-typecheck:
+typecheck: install-dev
 	uv run mypy src/
 
 # ── Local install ──────────────────────────────────────────────────
