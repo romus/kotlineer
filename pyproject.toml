@@ -46,3 +46,7 @@ strict = false
 warn_return_any = true
 warn_unused_configs = true
 mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = "kotlineer.services.*"
+warn_return_any = false

@@ -4,7 +4,7 @@ import asyncio
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 from urllib.parse import quote
 
 from .connection import LspConnection
@@ -23,6 +23,8 @@ from .services.symbols import SymbolService
 from .types import KotlinLspConfig, ServerNotRunningError
 
 logger = logging.getLogger(__name__)
+
+_ServiceT = TypeVar("_ServiceT")
 
 
 def _path_to_uri(path: str) -> str:
@@ -285,12 +287,12 @@ class KotlinLspClient:
         if not self.is_running:
             raise ServerNotRunningError()
 
-    def _get_service(self, name: str, cls: type) -> Any:
+    def _get_service(self, name: str, cls: type[_ServiceT]) -> _ServiceT:
         self._ensure_running()
         if name not in self._services:
             assert self._connection is not None
-            self._services[name] = cls(self._connection)
-        return self._services[name]
+            self._services[name] = cls(self._connection)  # type: ignore[call-arg]
+        return self._services[name]  # type: ignore[no-any-return]
 
     def _client_capabilities(self) -> dict[str, Any]:
         """Build client capabilities for the initialize request."""

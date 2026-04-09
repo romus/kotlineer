@@ -145,7 +145,7 @@ class LspConnection:
 
         # Read body
         body = await self._reader.readexactly(content_length)
-        data = json.loads(body)
+        data: dict[str, Any] = json.loads(body)
         return data
 
     def _dispatch(self, message: dict[str, Any]) -> None:
@@ -188,7 +188,7 @@ class LspConnection:
             if method == "workspace/configuration":
                 # Return an empty config object per requested item
                 items = (message.get("params") or {}).get("items", [{}])
-                result = [{} for _ in items]
+                result: Any = [{} for _ in items]
             else:
                 result = None
 
