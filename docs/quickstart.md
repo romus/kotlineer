@@ -158,9 +158,48 @@ kotlineer format --check || exit 1
     kotlineer format --check
 ```
 
+## 7. MCP for AI Assistants
+
+kotlineer includes an MCP server for use with Claude Desktop, Claude Code, and other MCP-compatible AI assistants.
+
+### Claude Code
+
+Add `.mcp.json` to your Kotlin project:
+
+```json
+{
+  "mcpServers": {
+    "kotlineer": {
+      "command": "kotlineer-mcp",
+      "args": ["--workspace", "."]
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "kotlineer": {
+      "command": "kotlineer-mcp",
+      "args": ["--workspace", "/path/to/kotlin-project"]
+    }
+  }
+}
+```
+
+This gives the AI assistant 8 Kotlin tools: check, format, hover, definition, references, symbols, completion, and rename.
+
+See [MCP Server](mcp.md) for full documentation.
+
 ## Next Steps
 
 - [CLI Reference](cli.md) — all commands, options, and output formats
+- [MCP Server](mcp.md) — use kotlineer with AI assistants
 - [Library Reference](library.md) — use kotlineer as a Python library
 - [Use Cases](use-cases.md) — CI/CD, batch refactoring, code analysis patterns
 - [Architecture](architecture.md) — internal design and how it works
