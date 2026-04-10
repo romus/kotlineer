@@ -1,6 +1,6 @@
 # kotlineer
 
-Lightweight Python CLI and library for [JetBrains kotlin-lsp](https://github.com/Kotlin/kotlin-lsp). Run diagnostics, format code, navigate symbols and more — directly from the terminal or Python code.
+Lightweight Python CLI and library for [JetBrains kotlin-lsp](https://github.com/Kotlin/kotlin-lsp). Run diagnostics, format code, navigate symbols and more — directly from the terminal, Python code, or AI assistants via MCP.
 
 ## Prerequisites
 
@@ -10,24 +10,31 @@ Lightweight Python CLI and library for [JetBrains kotlin-lsp](https://github.com
 
 ## Install
 
+### Homebrew (macOS)
+
+```bash
+brew tap romkln/tap
+brew install kotlineer
+```
+
+### pip
+
 ```bash
 pip install kotlineer
 ```
 
 ## Quick Start
 
-Start kotlin-lsp in socket mode (runs in background):
-
 ```bash
+# Start kotlin-lsp in background
 kotlin-lsp --socket 8200
-```
 
-Then use kotlineer — it connects to the running server automatically:
-
-```bash
-kotlineer check                    # run diagnostics on all .kt files
+# Run diagnostics and formatting
+kotlineer check                    # diagnostics on all .kt files
 kotlineer format                   # format all .kt files in place
 kotlineer format --check           # check formatting (CI-friendly, exit 1 if unformatted)
+
+# Navigate code
 kotlineer hover Main.kt 15 9      # type info at line 15, col 9
 kotlineer definition Main.kt 15 9 # go to definition
 kotlineer references Main.kt 8 14 # find all references
@@ -35,13 +42,9 @@ kotlineer symbols Main.kt         # list symbols in file
 kotlineer symbols -q UserService   # search workspace symbols
 ```
 
-All commands accept `--json` for machine-readable output.
+All commands accept `--json` for machine-readable output. Use `--spawn` to launch kotlin-lsp automatically (no pre-running server needed).
 
-### Spawn mode (no pre-running server)
-
-```bash
-kotlineer --spawn check
-```
+See [CLI Reference](docs/cli.md) for all commands and options.
 
 ## Library Usage
 
@@ -50,7 +53,6 @@ import asyncio
 from kotlineer import KotlinLspClient
 
 async def main():
-    # Connect to running server (default: localhost:8200)
     client = KotlinLspClient("/path/to/project")
     await client.start()
 
@@ -59,21 +61,34 @@ async def main():
     diags   = client.diagnostics.get()
     info    = await client.hover.hover(uri, line=14, character=8)
     loc     = await client.navigation.definition(uri, line=14, character=8)
-    items   = await client.completion.complete(uri, line=14, character=8)
     edits   = await client.formatting.format(uri)
     refs    = await client.navigation.references(uri, line=14, character=8)
-    actions = await client.code_actions.get_actions(uri, 0, 0, 10, 0)
 
     await client.stop()
 
 asyncio.run(main())
 ```
 
-Or spawn a subprocess:
+See [Library Reference](docs/library.md) for the full API.
 
-```python
-client = KotlinLspClient.spawn("/path/to/project")
+## MCP Server
+
+kotlineer exposes kotlin-lsp as tools for AI assistants (Claude Code, Claude Desktop, etc.) via [MCP](https://modelcontextprotocol.io).
+
+Add to `.mcp.json` in your Kotlin project:
+
+```json
+{
+  "mcpServers": {
+    "kotlineer": {
+      "command": "kotlineer-mcp",
+      "args": ["--workspace", "."]
+    }
+  }
+}
 ```
+
+See [MCP Server docs](docs/mcp.md) for all available tools and configuration options.
 
 ## Documentation
 
@@ -82,20 +97,9 @@ client = KotlinLspClient.spawn("/path/to/project")
 | [Quick Start](docs/quickstart.md) | Install, run, and check your first Kotlin file in 5 minutes |
 | [CLI Reference](docs/cli.md) | All commands, options, flags, and output formats |
 | [Library Reference](docs/library.md) | Full Python API: client construction, services, error handling |
-| [Use Cases](docs/use-cases.md) | CI/CD, pre-commit hooks, code analysis, batch refactoring, multi-project setups |
+| [MCP Server](docs/mcp.md) | MCP tools for AI assistants |
+| [Use Cases](docs/use-cases.md) | CI/CD, pre-commit hooks, code analysis, batch refactoring |
 | [Architecture](docs/architecture.md) | Internal design, layer diagram, connection modes |
-
-## Global Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--connect HOST:PORT` | `localhost:8200` | Connect to a running kotlin-lsp |
-| `--spawn` | off | Launch a new subprocess instead |
-| `--server-path PATH` | `kotlin-lsp` | Binary path (with `--spawn`) |
-| `-w, --workspace DIR` | `.` | Project root |
-| `--timeout SEC` | `30` | Request timeout |
-| `--json` | off | JSON output |
-| `-v` | off | Verbose / debug logging |
 
 ## CI Example
 
